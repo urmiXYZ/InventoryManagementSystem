@@ -1,0 +1,294 @@
+﻿@{
+    ViewData["Title"] = "Edit Order";
+    var orderId = ViewBag.OrderId;
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <h3>Edit Order</h3>
+        <a href="/Orders" class="btn btn-outline-secondary">Back to Order List</a>
+    </div>
+    <hr />
+
+    <form id="editOrderForm">
+        <input type="hidden" id="orderId" value="@orderId" />
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">Order Date</label>
+            <input type="text" class="form-control" id="orderDate" readonly />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">Total Amount</label>
+            <input type="text" class="form-control" id="totalAmount" readonly />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">Status</label>
+            <select class="form-select" id="orderStatus"></select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">Customer</label>
+            <select class="form-select" id="customerDropdown">
+                <option value="">-- Select Customer --</option>
+            </select>
+        </div>
+
+        <!-- Add Product Button -->
+        <div class="mb-3">
+            <button type="button" class="btn btn-primary" id="btnAddProduct">
+                <i class="bi bi-plus-circle"></i> Add Product
+            </button>
+        </div>
+
+        <!-- Order Details Table -->
+        <div id="orderDetailsSection">
+            <h5>Order Details</h5>
+            <table class="table table-bordered align-middle" id="orderDetailsTable">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Product</th>
+                        <th>Unit Price</th>
+                        <th>Available Stock</th>
+                        <th>Quantity</th>
+                        <th>Subtotal</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="orderDetailsBody"></tbody>
+            </table>
+
+            <div class="mt-3">
+                <button type="submit" class="btn btn-success">Update Order</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <script>
+        $(function () {
+            let products = [];
+            let order = null;
+            const orderId = $("#orderId").val();
+
+
+
+            // Helpers
+            function getProductById(id) {
+                return products.find(p => String(p.id) === String(id));
+            }
+            function getProductStockById(id) {
+                const p = getProductById(id);
+                if (!p) return 0;
+                return p.stockQuantity ?? p.stock ?? p.stockQty ?? p.quantityInStock ?? p.availableStock ?? p.quantity ?? 0;
+            }
+            function getProductPriceById(id) {
+                const p = getProductById(id);
+                if (!p) return 0;
+                return p.price ?? p.unitPrice ?? p.salePrice ?? 0;
+            }
+
+            function buildOption(p, currentVal) {
+                const price = getProductPriceById(p.id);
+                const stock = getProductStockById(p.id);
+                const sel = String(p.id) === String(currentVal) ? ' selected' : '';
+                return `<option value="${p.id}" data-price="${price}" data-stock="${stock}"${sel}>${p.name}</option>`;
+            }
+
+            function getAvailableProductOptions(selectedIds, currentVal) {
+                let opts = '<option value="">-- Select Product --</option>';
+                products.forEach(p => {
+                    if (!selectedIds.includes(String(p.id)) || String(p.id) === String(currentVal)) {
+                        opts += buildOption(p, currentVal);
+                    }
+                });
+                return opts;
+            }
+
+            function updateAllDropdowns() {
+                const selectedIds = [];
+                $(".productDropdown").each(function () {
+                    const v = $(this).val();
+                    if (v) selectedIds.push(String(v));
+                });
+
+                $(".productDropdown").each(function () {
+                    const currentVal = $(this).val() || "";
+                    const opts = getAvailableProductOptions(selectedIds, currentVal);
+                    $(this).html(opts);
+                    if (currentVal) $(this).val(currentVal);
+                });
+            }
+
+            function resetRowNumbers() {
+                $("#orderDetailsBody tr").each(function (i) {
+                    $(this).find("td:first").text(i + 1);
+                });
+            }
+
+            function updateRowSubtotal(row) {
+                const qty = parseInt(row.find(".quantity").val()) || 0;
+                const price = parseFloat(row.find(".unitPrice").val()) || 0;
+                const subtotal = qty * price;
+                row.find(".subtotal").val(subtotal.toFixed(2));
+            }
+
+            function recalcTotal() {
+                let total = 0;
+                $("#orderDetailsBody .subtotal").each(function () {
+                    total += parseFloat($(this).val()) || 0;
+                });
+                $("#totalAmount").val(total.toFixed(2));
+            }
+
+            function addRow(detail, rowIndex) {
+                rowIndex = rowIndex || $("#orderDetailsBody tr").length + 1;
+
+                const selectedIds = [];
+                $(".productDropdown").each(function () {
+                    const v = $(this).val();
+                    if (v) selectedIds.push(String(v));
+                });
+
+                const currentVal = detail ? detail.productId : "";
+                const options = getAvailableProductOptions(selectedIds, currentVal);
+
+                const unitPrice = detail ? detail.unitPrice : (currentVal ? getProductPriceById(currentVal) : 0);
+                const stock = currentVal ? getProductStockById(currentVal) : 0;
+                const qty = detail ? detail.quantity : 1;
+                const subtotal = (parseFloat(unitPrice) || 0) * (parseInt(qty) || 0);
+
+                const rowHtml = `
+                <tr data-row="${rowIndex}">
+                    <td>${rowIndex}</td>
+                    <td><select class="form-select productDropdown">${options}</select></td>
+                    <td><input type="text" class="form-control unitPrice" readonly value="${parseFloat(unitPrice) || 0}" /></td>
+                    <td><input type="text" class="form-control stock" readonly value="${stock}" /></td>
+                    <td><input type="number" class="form-control quantity" min="1" value="${qty}" /></td>
+                    <td><input type="text" class="form-control subtotal" readonly value="${(subtotal).toFixed(2)}" /></td>
+                    <td><button type="button" class="btn btn-danger btn-sm btnRemove">Remove</button></td>
+                </tr>`;
+                $("#orderDetailsBody").append(rowHtml);
+
+                if (currentVal) $("#orderDetailsBody tr:last .productDropdown").val(currentVal);
+
+                updateAllDropdowns();
+                resetRowNumbers();
+            }
+
+            // Load order + products
+                $.when(
+            $.get(`/Orders/GetOrder/${orderId}`),
+            $.get("/Orders/GetProducts"),
+            $.get("/Orders/GetCustomers")
+        ).done(function(orderResp, productsResp, customersResp) {
+            order = orderResp[0];
+            products = productsResp[0];
+            const customers = customersResp[0];
+
+            // Set Order Date and Total
+            $("#orderDate").val(order.orderDate.split("T")[0]);
+            $("#totalAmount").val(order.totalAmount.toFixed(2));
+
+            // Status options
+            const statusOptions = `
+                <option value="1">Pending</option>
+                <option value="2">Processing</option>
+                <option value="3">InDelivery</option>
+                <option value="4">Delivered</option>
+                <option value="5">Cancelled</option>
+            `;
+            $("#orderStatus").html(statusOptions).val(order.status);
+
+            // Populate customer dropdown
+            let opts = '<option value="">-- Select Customer --</option>';
+            customers.forEach(c => {
+        opts += `<option value="${c.id}" ${String(c.id) === String(order.customerId) ? 'selected' : ''}>${c.name}</option>`;            });
+            $("#customerDropdown").html(opts);
+
+            // Populate order details table
+            $("#orderDetailsBody").empty();
+            order.orderDetails.forEach((d, i) => addRow(d, i + 1));
+
+            
+
+            recalcTotal();
+        });
+
+            // Events
+            $(document).on("change", ".productDropdown", function () {
+                const row = $(this).closest("tr");
+                const selectedOpt = $(this).find("option:selected");
+                const price = parseFloat(selectedOpt.data("price")) || getProductPriceById($(this).val()) || 0;
+                const stock = parseInt(selectedOpt.data("stock")) || getProductStockById($(this).val()) || 0;
+
+                row.find(".unitPrice").val(price);
+                row.find(".stock").val(stock);
+                updateRowSubtotal(row);
+                recalcTotal();
+
+                updateAllDropdowns();
+            });
+
+            $(document).on("input", ".quantity", function () {
+                const row = $(this).closest("tr");
+                const qty = parseInt($(this).val()) || 0;
+                const stock = parseInt(row.find(".stock").val()) || 0;
+                if (stock && qty > stock) {
+                    toastr.warning("Quantity exceeds available stock. Adjusted to available stock.");
+                    $(this).val(stock);
+                }
+                updateRowSubtotal(row);
+                recalcTotal();
+            });
+
+            $(document).on("click", ".btnRemove", function () {
+                $(this).closest("tr").remove();
+                resetRowNumbers();
+                recalcTotal();
+                updateAllDropdowns();
+            });
+
+            $(document).on("click", "#btnAddProduct", function () {
+                addRow(null);
+                recalcTotal();
+            });
+
+            $("#editOrderForm").submit(function (e) {
+                e.preventDefault();
+                const updatedOrder = {
+                    id: parseInt(orderId),
+                    customerId: parseInt($("#customerDropdown").val()),
+                    status: parseInt($("#orderStatus").val()),
+                    orderDetails: []
+                };
+                $("#orderDetailsBody tr").each(function () {
+                    const row = $(this);
+                    updatedOrder.orderDetails.push({
+                        productId: parseInt(row.find(".productDropdown").val()),
+                        unitPrice: parseFloat(row.find(".unitPrice").val()),
+                        quantity: parseInt(row.find(".quantity").val())
+                    });
+                });
+
+                $.ajax({
+                    url: "/Orders/Edit",
+                    type: "POST",
+                    data: JSON.stringify(updatedOrder),
+                    contentType: "application/json",
+                    success: function (res) {
+                        if (res.success) window.location.href = "/Orders";
+                        else toastr.error(res.error || "Update failed!");
+                    },
+                    error: function (xhr) {
+                        toastr.error(xhr.responseText || "Error updating order");
+                    }
+                });
+            });
+        });
+    </script>
+
+}

@@ -1,0 +1,532 @@
+﻿@model IEnumerable<InventoryManagementSystem.Data.Order>
+@using InventoryManagementSystem.Data
+
+@{
+    int sl = 1;
+    ViewData["Title"] = "Order List";
+
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Orders</h2>
+    <button class="btn btn-primary" id="btnAddOrder">
+        <i class="bi bi-plus-lg"></i> Add Order
+    </button>
+</div>
+
+<table class="table table-bordered table-hover align-middle">
+    <thead class="table-dark">
+        <tr>
+            <th style="width:50px;">SL</th>
+            <th>Date</th>
+            <th>Customer</th>
+            <th>Total Amount</th>
+            <th>Status</th>
+            <th style="width:200px;">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var order in Model)
+        {
+            <tr class="table-primary fw-bold order-row" data-id="@order.Id">
+                <td>@sl</td>
+                <td>@order.OrderDate.ToShortDateString()</td>
+                <td>@order.Customer?.Name</td>
+                <td>@order.TotalAmount</td>
+                <td>
+                    <select class="form-select form-select-sm order-status" data-id="@order.Id">
+                        @foreach (OrderStatus s in Enum.GetValues(typeof(OrderStatus)))
+                        {
+                            var optionValue = ((int)s).ToString();
+                            var optionText = s.ToString();
+                            var optionSelected = ((int)s == (int)order.Status) ? " selected" : "";
+                            var optionDisabled = s == OrderStatus.InDelivery ? " disabled" : "";
+                            @Html.Raw($"<option value=\"{optionValue}\"{optionSelected}{optionDisabled}>{optionText}</option>")
+                        }
+                    </select>
+                </td>
+
+                <td>
+                    <button class="btn btn-sm btn-primary send-delivery"
+                            data-id="@order.Id"
+                            title="Send for Delivery"
+                    @(order.Status == OrderStatus.InDelivery ? "disabled" : "")>
+                        <i class="bi bi-truck"></i> Send for Delivery
+                    </button>
+
+                    <button class="btn btn-sm btn-info"
+                    @(order.Status == OrderStatus.InDelivery ? "disabled" : "")>
+                        Details
+                    </button>
+
+                    <button class="btn btn-sm btn-warning edit-order"
+                            id="btnEditOrder"
+                            data-id="@order.Id"
+                    @(order.Status == OrderStatus.InDelivery ? "disabled" : "")>
+                        Edit
+                    </button>
+
+                    <button class="btn btn-sm btn-danger delete-order"
+                            data-id="@order.Id"
+                    @(order.Status == OrderStatus.InDelivery ? "disabled" : "")>
+                        Delete
+                    </button>
+                </td>
+            </tr>
+
+            @foreach (var detail in order.OrderDetails)
+            {
+                <tr class="table-light detail-row" data-id="@detail.Id" data-order-id="@order.Id">
+                    <td></td>
+                    <td colspan="2">@detail.Product?.Name</td>
+                    <td>@detail.Quantity × @detail.UnitPrice</td>
+                    <td>@detail.TotalPrice</td>
+                    <td>
+                        <button class="btn btn-sm btn-info" title="Details">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                        <button class="btn btn-sm btn-warning" title="Edit">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger delete-detail" data-id="@detail.Id" title="Delete">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            }
+        }
+
+
+
+            sl++;
+        }
+
+    </tbody>
+</table>
+<!-- Send for Delivery Modal -->
+<div class="modal fade" id="sendDeliveryModal" tabindex="-1" aria-labelledby="sendDeliveryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+
+            <!-- Header -->
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="sendDeliveryModalLabel">
+                    <i class="bi bi-truck me-2"></i> Send for Delivery
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <!-- Body -->
+            <div class="modal-body">
+
+                <!-- Delivery Options -->
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="deliveryOption" id="sendWholeOrder" value="whole">
+                        <label class="form-check-label fw-bold" for="sendWholeOrder">
+                            Send Whole Order
+                        </label>
+                    </div>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="radio" name="deliveryOption" id="sendSelectedProducts" value="selected">
+                        <label class="form-check-label fw-bold" for="sendSelectedProducts">
+                            Send Selected Products
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Product Selection Table -->
+                <div id="productSelectionContainer" class="mt-3" style="display:none;">
+                    <table class="table table-bordered table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 60px;">Select</th>
+                                <th>Product</th>
+                                <th style="width: 120px;">Quantity</th>
+                            </tr>
+                        </thead>
+                        <tbody id="productSelectionBody">
+                            <!-- Rows populated dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle me-1"></i> Cancel
+                </button>
+                <button type="button" class="btn btn-primary" id="confirmSendDelivery">
+                    <i class="bi bi-truck me-1"></i> Send for Delivery
+                </button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+
+
+
+
+@section Scripts {
+    <script>
+          $(document).ready(function() {
+              var msg = '@TempData["SuccessMessage"]';
+              if (msg) {
+                  toastr.success(msg);
+              }
+
+        let deliveryOrderId = null;
+        let deliveryOrderDetails = [];
+
+        $(document).on("click", ".send-delivery", function() {
+             deliveryOrderId = $(this).data("id");
+
+            const products = $("tr.detail-row[data-order-id='" + deliveryOrderId + "']");
+
+            if (products.length === 1) {
+                // Single product - directly send
+                const detailId = products.data("id");
+                sendForDelivery([detailId], true);
+            } else {
+                // Multiple products - show modal
+                deliveryOrderDetails = [];
+                products.each(function() {
+                    const row = $(this);
+                    deliveryOrderDetails.push({
+                        detailId: row.data("id"),
+                        productName: row.find("td:nth-child(2)").text().trim(),
+                        quantity: parseInt(row.find("td:nth-child(3)").text().split("×")[0].trim())
+                    });
+                });
+                populateDeliveryModal();
+            }
+        });
+
+                function sendForDelivery(productDetailIds, showToast = false) {
+            $.ajax({
+                url: "/Orders/SendForDelivery",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({
+                    orderId: deliveryOrderId,
+                    sendWholeOrder: true,
+                    productDetailIds: productDetailIds
+                }),
+                success: function(res) {
+                    if (res.success) {
+                        if(showToast) toastr.success("Products sent for delivery!");
+                        const row = $("tr.order-row[data-id='" + deliveryOrderId + "']");
+                        row.find("select.order-status").val(3).prop("disabled", true); // 3 = InDelivery
+                        row.find(".edit-order, .delete-order").prop("disabled", true);
+                        row.nextUntil("tr.order-row").find("button").not(".btn-info").prop("disabled", true);
+                        row.addClass("table-secondary");
+                        row.nextUntil("tr.order-row").addClass("table-secondary");
+                    } else {
+                        toastr.error(res.error || "Failed to send for delivery.");
+                    }
+                },
+                error: function(xhr) {
+                    toastr.error("Error: " + xhr.responseText);
+                }
+            });
+        }
+
+        // Function to populate modal
+        function populateDeliveryModal() {
+            const tbody = $("#productSelectionBody");
+            tbody.empty();
+            deliveryOrderDetails.forEach(d => {
+                tbody.append(`
+                    <tr>
+                        <td><input type="checkbox" class="delivery-product" data-detail-id="${d.detailId}" checked></td>
+                        <td>${d.productName}</td>
+                        <td>${d.quantity}</td>
+                    </tr>
+                `);
+            });
+            $("#sendWholeOrder").prop("checked", true);
+            $("#productSelectionContainer").hide();
+            $("#sendDeliveryModal").modal("show");
+        }
+
+
+            // Toggle product selection table
+            $("input[name='deliveryOption']").change(function() {
+                if ($("#sendSelectedProducts").is(":checked")) {
+                    $("#productSelectionContainer").show();
+                } else {
+                    $("#productSelectionContainer").hide();
+                }
+            });
+
+        $("#confirmSendDelivery").click(function() {
+            let sendAll = $("#sendWholeOrder").is(":checked");
+            let productsToSend = [];
+
+            if (sendAll) {
+                productsToSend = deliveryOrderDetails.map(d => d.detailId);
+            } else {
+                $(".delivery-product:checked").each(function() {
+                    productsToSend.push($(this).data("detail-id"));
+                });
+            }
+
+            if (productsToSend.length === 0) {
+                toastr.warning("Select at least one product to send for delivery.");
+                return;
+            }
+
+            $.ajax({
+                url: "/Orders/SendForDelivery",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({
+                    orderId: deliveryOrderId,
+                    sendWholeOrder: sendAll,
+                    productDetailIds: productsToSend
+                }),
+        success: function(res) {
+            if (!res.success) {
+                toastr.error(res.error || "Failed to send for delivery.");
+                return;
+            }
+
+            $("#sendDeliveryModal").modal("hide");
+            toastr.success("Products sent for delivery!");
+
+            const originalRow = $("tr.order-row[data-id='" + deliveryOrderId + "']");
+
+                   // Remove selected products from original order
+        deliveryOrderDetails.forEach(d => {
+            if (productsToSend.includes(d.detailId)) {
+                $("tr.detail-row[data-id='" + d.detailId + "']").remove();
+            }
+        });
+
+        // Update original order total
+        originalRow.find("td:nth-child(4)").text(res.remainingTotal);
+
+        // If original order has no remaining products
+        if (res.remainingTotal === 0) {
+            originalRow.find(".send-delivery, .edit-order, .delete-order").prop("disabled", true);
+            originalRow.find("select.order-status").val(3).prop("disabled", true);
+            originalRow.addClass("table-secondary");
+        }
+
+        // Add new order row for delivered products only
+        if (res.newOrderId && res.newOrder.length > 0) {
+            let newOrderTotal = res.newOrder.reduce((sum, d) => sum + d.totalPrice, 0);
+
+            let newOrderRow = `<tr class="table-primary fw-bold order-row" data-id="${res.newOrderId}">
+                <td></td>
+                <td>${new Date().toLocaleDateString()}</td>
+                <td>${originalRow.find("td:nth-child(3)").text()}</td>
+                <td>${newOrderTotal}</td>
+                <td>
+                    <select class="form-select form-select-sm order-status" data-id="${res.newOrderId}" disabled>
+                        <option value="3" selected>InDelivery</option>
+                    </select>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-primary send-delivery" disabled>Send for Delivery</button>
+                    <button class="btn btn-sm btn-info">Details</button>
+                    <button class="btn btn-sm btn-warning" disabled>Edit</button>
+                    <button class="btn btn-sm btn-danger" disabled>Delete</button>
+                </td>
+            </tr>`;
+
+            // Only add the **selected products** for the new order
+            res.newOrder.forEach(d => {
+                newOrderRow += `<tr class="table-light detail-row" data-id="${d.detailId}" data-order-id="${res.newOrderId}">
+                    <td></td>
+                    <td colspan="2">${d.productName}</td>
+                    <td>${d.quantity}</td>
+                    <td>${d.totalPrice}</td>
+                    <td>
+                        <button class="btn btn-sm btn-info">Details</button>
+                        <button class="btn btn-sm btn-warning" disabled>Edit</button>
+                        <button class="btn btn-sm btn-danger" disabled>Delete</button>
+                    </td>
+                </tr>`;
+            });
+
+            originalRow.after(newOrderRow);
+        }
+
+        recalcSerials();
+        updateActionButtons();
+}
+
+
+        ,
+                error: function(xhr) {
+                    toastr.error("Error: " + xhr.responseText);
+                }
+            });
+        });
+
+        });
+
+        function updateActionButtons() {
+            $("tr.order-row").each(function () {
+                const row = $(this);
+                const orderId = row.data("id");
+                const status = parseInt(row.find(".order-status").val()); // numeric enum
+
+                // Reset everything
+                row.find("button").prop("disabled", false);
+                row.find(".order-status").prop("disabled", false);
+                row.nextUntil("tr.order-row").find("button").prop("disabled", false);
+                row.removeClass("table-secondary");
+                row.nextUntil("tr.order-row").removeClass("table-secondary");
+                row.css("opacity", "1");
+                row.nextUntil("tr.order-row").css("opacity", "1");
+
+                const detailRows = row.nextUntil("tr.order-row");
+
+                if (status === 3) { // InDelivery
+                    // Disable all buttons except Details
+                    row.find("button").not(".btn-info").prop("disabled", true);
+                    detailRows.find("button").not(".btn-info").prop("disabled", true);
+
+                    // Keep dropdown enabled
+                    row.find(".order-status").prop("disabled", false);
+
+                    // Grey out rows
+                    row.addClass("table-secondary");
+                    detailRows.addClass("table-secondary");
+                }
+                else if (status === 4 || status === 5) { // Delivered or Cancelled
+                    // Disable all buttons including Details
+                    row.find("button").prop("disabled", true);
+                    row.find(".order-status").prop("disabled", true);
+                    detailRows.find("button").prop("disabled", true);
+
+                    // Grey out rows
+                    row.addClass("table-secondary");
+                    detailRows.addClass("table-secondary");
+                    row.css("opacity", "0.5");
+                    detailRows.css("opacity", "0.5");
+                }
+            });
+        }
+
+        // Call initially and after status change
+        updateActionButtons();
+
+        $(document).on("change", ".order-status", function () {
+            var id = $(this).data("id");
+            var status = $(this).val();
+
+            $.ajax({
+                url: "/Orders/UpdateStatus",
+                type: "POST",
+                data: { id: id, status: status },
+                success: function(res) {
+                    if (res.success) {
+                        toastr.success("Status updated!");
+                        updateActionButtons();
+                    } else {
+                        toastr.error("Failed to update status");
+                    }
+                },
+                error: function(xhr, status, error) {
+                    toastr.error("An error occurred: " + error);
+                }
+            });
+        });
+
+
+        //  Delete order
+        $(document).on("click", ".delete-order", function () {
+            if (!confirm("Delete this order?")) return;
+            var id = $(this).data("id");
+
+            $.ajax({
+                url: "/Orders/DeleteOrder",
+                type: "POST",
+                data: { id: id }, // send as form data
+                success: function(res) {
+                    if (res.success) {
+                        // Remove the order row and its details
+                        $("tr.order-row[data-id='" + id + "']").nextUntil("tr.order-row").remove();
+                        $("tr.order-row[data-id='" + id + "']").remove();
+                        toastr.success("Order deleted!");
+                        recalcSerials(); // update SL
+                    } else {
+                        toastr.error("Delete failed!");
+                    }
+                },
+                error: function(xhr, status, error) {
+                    toastr.error("An error occurred: " + error);
+                }
+            });
+        });
+
+        $(document).on("click", ".delete-detail", function () {
+            if (!confirm("Delete this product?")) return;
+
+            var detailRow = $(this).closest("tr");
+            var detailId = detailRow.data("id");
+            var orderId = detailRow.data("order-id");
+
+            $.ajax({
+                url: "/Orders/DeleteDetail",
+                type: "POST",
+                data: { id: detailId }, // send as form data
+                success: function(res) {
+                    if (res.success) {
+                        // Remove the detail row
+                        detailRow.remove();
+                        toastr.success("Product deleted!");
+
+                        // If the order has no more products, remove the order row
+                        if (res.orderDeleted) {
+                            $("tr.detail-row[data-order-id='" + orderId + "']").remove();
+                            $("tr.order-row[data-id='" + orderId + "']").remove();
+                            toastr.info("Order removed because it had no more products.");
+                        }
+
+                        // Recalculate serial numbers (SL) after deletion
+                        recalcSerials();
+                    } else {
+                        toastr.error("Delete failed!");
+                    }
+                },
+                error: function(xhr, status, error) {
+                    toastr.error("An error occurred: " + error);
+                }
+            });
+        });
+
+        function recalcSerials() {
+            let sl = 1;
+            $("tr.order-row").each(function () {
+                $(this).find("td:first").text(sl); // set serial for order row
+                sl++;
+            });
+        }
+
+         $(function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get("updated") === "true") {
+                toastr.success("Order updated successfully!");
+            }
+        });
+
+                //  Add Order button (redirect to Create page)
+        $("#btnAddOrder").click(function () {
+            window.location.href = '/Orders/Create';
+        });
+                $(document).on("click", ".edit-order", function () {
+            var id = $(this).data("id");
+            window.location.href = '/Orders/Edit/' + id;
+        });
+
+
+    </script>
+}
