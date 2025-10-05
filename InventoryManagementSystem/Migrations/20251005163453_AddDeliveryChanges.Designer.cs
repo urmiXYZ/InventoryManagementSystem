@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace InventoryManagementSystem.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20251003171207_fixedStatus")]
-    partial class fixedStatus
+    [Migration("20251005163453_AddDeliveryChanges")]
+    partial class AddDeliveryChanges
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -104,6 +104,54 @@ namespace InventoryManagementSystem.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Customers");
+                });
+
+            modelBuilder.Entity("InventoryManagementSystem.Data.Delivery", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("DeliveryDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDelivered")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("OrderDetailId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReturnReason")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderDetailId");
+
+                    b.HasIndex("OrderId");
+
+                    b.ToTable("Deliveries");
                 });
 
             modelBuilder.Entity("InventoryManagementSystem.Data.Order", b =>
@@ -496,6 +544,25 @@ namespace InventoryManagementSystem.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("InventoryManagementSystem.Data.Delivery", b =>
+                {
+                    b.HasOne("InventoryManagementSystem.Data.OrderDetails", "OrderDetail")
+                        .WithMany()
+                        .HasForeignKey("OrderDetailId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("InventoryManagementSystem.Data.Order", "Order")
+                        .WithMany("Deliveries")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+
+                    b.Navigation("OrderDetail");
+                });
+
             modelBuilder.Entity("InventoryManagementSystem.Data.Order", b =>
                 {
                     b.HasOne("InventoryManagementSystem.Data.Customer", "Customer")
@@ -603,6 +670,8 @@ namespace InventoryManagementSystem.Migrations
 
             modelBuilder.Entity("InventoryManagementSystem.Data.Order", b =>
                 {
+                    b.Navigation("Deliveries");
+
                     b.Navigation("OrderDetails");
                 });
 

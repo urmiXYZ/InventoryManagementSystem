@@ -6,13 +6,16 @@
         Processing,
         InDelivery,
         Delivered,
-        Cancelled
+        Cancelled,
+        Returned
     }
     public class Order : BaseEntity
     {
         public Order()
         {
             OrderDetails = new List<OrderDetails>();
+            Deliveries = new List<Delivery>(); 
+
         }
         public DateTime OrderDate { get; set; } = DateTime.UtcNow;
         public decimal TotalAmount { get; set; }
@@ -20,5 +23,7 @@
         public int CustomerId { get; set; }
         public Customer? Customer { get; set; }
         public List<OrderDetails> OrderDetails { get; set; }
+        public List<Delivery> Deliveries { get; set; } = new List<Delivery>();
+
     }
 }

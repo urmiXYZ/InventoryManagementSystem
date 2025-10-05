@@ -1,0 +1,200 @@
+﻿@model List<InventoryManagementSystem.Controllers.DeliveryGroupViewModel>
+
+<div class="container mt-4">
+
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb bg-light p-2 rounded shadow-sm">
+            <li class="breadcrumb-item"><a href="@Url.Action("Index", "Orders")">Orders</a></li>
+            <li class="breadcrumb-item active" aria-current="page">View Deliveries</li>
+        </ol>
+    </nav>
+
+    <!-- Header with navigation buttons -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-truck me-2"></i>Orders in Delivery</h2>
+        <div>
+            <a class="btn btn-primary btn-sm me-2 shadow-sm" href="@Url.Action("DeliveredIndex", "Deliveries")">
+                <i class="bi bi-check-circle me-1"></i> Delivered Orders
+            </a>
+            <a class="btn btn-secondary btn-sm shadow-sm" href="@Url.Action("ReturnedIndex", "Deliveries")">
+                <i class="bi bi-x-circle me-1"></i> Rejected Orders
+            </a>
+        </div>
+    </div>
+
+    <!-- Orders Cards -->
+    <div class="row g-4">
+        @foreach (var group in Model)
+        {
+            var isReturned = group.Products.FirstOrDefault()?.IsReturned == true;
+            var isDelivered = group.Products.FirstOrDefault()?.IsDelivered == true;
+
+            var cardClass = isDelivered ? "bg-success text-white"
+            : isReturned ? "bg-danger text-white"
+            : "bg-light";
+
+            <div class="col-md-4">
+                <div class="card shadow-sm h-100 @cardClass">
+                    <div class="card-header fw-bold">
+                        Order #@group.OrderId - @group.CustomerName
+                    </div>
+                    <div class="card-body">
+
+                        <ul class="list-group list-group-flush mb-3">
+                            @foreach (var d in group.Products)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center @((d.IsDelivered && !isReturned) ? "fw-bold bg-success text-white" : "")">
+                                    <span>@d.OrderDetail?.Product?.Name</span>
+                                    <span class="badge bg-secondary rounded-pill">
+                                        @d.OrderDetail?.Quantity × @d.OrderDetail?.UnitPrice
+                                    </span>
+                                </li>
+                            }
+                        </ul>
+
+                        @if (!isDelivered && !isReturned)
+                        {
+                            <button class="btn btn-success btn-sm me-2 mark-delivered" data-order-id="@group.OrderId">Delivered</button>
+                            <button class="btn btn-danger btn-sm return-delivery" data-order-id="@group.OrderId">Returned</button>
+                        }
+                        else if (isReturned)
+                        {
+                            <div class="fw-bold">Return Reason:</div>
+                            <div>@group.Products.First().ReturnReason</div>
+
+                            <div class="fw-bold mt-2">Return Date:</div>
+                            <div>@group.Products.First().DeliveryDate.ToShortDateString()</div>
+                        }
+                        else if (isDelivered)
+                        {
+                            <div class="fw-bold">Delivered on:</div>
+                            <div>@group.Products.First().DeliveryDate.ToShortDateString()</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .card:hover {
+        transform: translateY(-3px);
+        transition: all 0.2s ease-in-out;
+    }
+
+    .list-group-item span {
+        font-weight: 500;
+    }
+
+    .badge {
+        font-size: 0.9rem;
+    }
+
+    .card-header {
+        font-size: 1rem;
+    }
+
+    .fw-bold {
+        font-weight: 600;
+    }
+</style>
+
+
+<!-- Return Reason Modal -->
+<div class="modal fade" id="returnReasonModal" tabindex="-1" aria-labelledby="returnReasonModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="returnReasonModalLabel">Return Reason</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <textarea id="returnReasonText" class="form-control" placeholder="Enter return reason"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="submitReturnReason">Submit</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="deliveredModal" tabindex="-1" aria-labelledby="deliveryFeedbackModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="deliveryFeedbackModalLabel">Delivery Feedback</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="deliveryNotes" class="form-label">Notes (optional)</label>
+                    <textarea id="deliveryNotes" class="form-control" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="confirmDelivery">Mark Delivered</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+            let returnOrderId = null;
+
+
+         // Returned button
+        $(document).on("click", ".return-delivery", function() {
+            returnOrderId = $(this).data("order-id");
+            $("#returnReasonText").val("");
+            $("#returnReasonModal").modal("show");
+        });
+
+        // On modal confirm
+        $("#submitReturnReason").click(function() {
+            const reason = $("#returnReasonText").val();
+            if (!reason) {
+                alert("Please provide a reason!");
+                return;
+            }
+
+            $.post("/Deliveries/MarkReturned", { orderId: returnOrderId, reason: reason }, function(res) {
+                if (res.success) {
+                    $("#returnReasonModal").modal("hide");
+                    location.reload();
+                } else {
+                    alert("Failed to mark returned.");
+                }
+            });
+        });
+
+
+                    let deliverOrderId = null;
+
+        $(document).on("click", ".mark-delivered", function() {
+            deliverOrderId = $(this).data("order-id");
+                $("#deliveryNotes").val(""); // reset input
+            $("#deliveredModal").modal("show"); // show modal
+        });
+
+        // On modal confirm
+            $("#confirmDelivery").click(function() {
+                const notes = $("#deliveryNotes").val();
+
+            $.post("/Deliveries/MarkDelivered", { orderId: deliverOrderId, notes: notes }, function(res) {
+                if(res.success) {
+                    $("#deliveredModal").modal("hide");
+                    location.reload();
+                } else {
+                    alert("Failed to mark delivered.");
+                }
+            });
+        });
+
+
+</script>
+}

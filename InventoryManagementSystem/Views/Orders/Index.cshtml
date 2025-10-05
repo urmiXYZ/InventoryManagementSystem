@@ -1,6 +1,7 @@
 ﻿@model IEnumerable<InventoryManagementSystem.Data.Order>
 @using InventoryManagementSystem.Data
 
+
 @{
     int sl = 1;
     ViewData["Title"] = "Order List";
@@ -9,14 +10,21 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h2>Orders</h2>
-    <button class="btn btn-primary" id="btnAddOrder">
-        <i class="bi bi-plus-lg"></i> Add Order
-    </button>
+    <div>
+        <button class="btn btn-primary me-2" id="btnAddOrder">
+            <i class="bi bi-plus-lg"></i> Add Order
+        </button>
+        <a href="/Deliveries/Index" class="btn btn-success">
+            <i class="bi bi-truck"></i> View Deliveries
+        </a>
+    </div>
 </div>
+
 
 <table class="table table-bordered table-hover align-middle">
     <thead class="table-dark">
         <tr>
+            <th style="width:50px;"></th>
             <th style="width:50px;">SL</th>
             <th>Date</th>
             <th>Customer</th>
@@ -28,60 +36,107 @@
     <tbody>
         @foreach (var order in Model)
         {
-            <tr class="table-primary fw-bold order-row" data-id="@order.Id">
+            var allInDelivery = order.OrderDetails.All(od =>
+            order.Deliveries.Any(d => d.OrderDetailId == od.Id && !d.IsDelivered && !d.IsReturned));
+            var allIsDelivered = order.OrderDetails.All(od =>
+            order.Deliveries.Any(d => d.OrderDetailId == od.Id && d.IsDelivered));
+            var allReturned = order.OrderDetails.All(od =>
+            order.Deliveries.Any(d => d.OrderDetailId == od.Id && d.IsReturned));
+
+            <tr class="table-primary fw-bold order-row " data-id="@order.Id">
+                <td class="text-center toggle-details" style="cursor:pointer;">
+                    <i class="bi bi-plus-square-fill"></i>
+                </td>
                 <td>@sl</td>
                 <td>@order.OrderDate.ToShortDateString()</td>
                 <td>@order.Customer?.Name</td>
                 <td>@order.TotalAmount</td>
                 <td>
-                    <select class="form-select form-select-sm order-status" data-id="@order.Id">
-                        @foreach (OrderStatus s in Enum.GetValues(typeof(OrderStatus)))
-                        {
-                            var optionValue = ((int)s).ToString();
-                            var optionText = s.ToString();
-                            var optionSelected = ((int)s == (int)order.Status) ? " selected" : "";
-                            var optionDisabled = s == OrderStatus.InDelivery ? " disabled" : "";
-                            @Html.Raw($"<option value=\"{optionValue}\"{optionSelected}{optionDisabled}>{optionText}</option>")
-                        }
-                    </select>
+                    @if (allInDelivery)
+                    {
+                        <select class="form-select form-select-sm order-status" data-id="@order.Id" disabled>
+                            <option selected>In Delivery</option>
+                        </select>
+                    }
+                    else if (allReturned || order.Status == OrderStatus.Returned)
+                    {
+                        <select class="form-select form-select-sm order-status" data-id="@order.Id" disabled>
+                            <option selected>Returned</option>
+                        </select>
+                    }
+
+                    else
+                    {
+                        <select class="form-select form-select-sm order-status" data-id="@order.Id">
+                            @foreach (OrderStatus s in Enum.GetValues(typeof(OrderStatus)))
+                            {
+                                var optionValue = ((int)s).ToString();
+                                var optionText = s.ToString();
+                                var optionSelected = ((int)s == (int)order.Status ? " selected" : "");
+                                @Html.Raw($"<option value=\"{optionValue}\"{optionSelected}>{optionText}</option>")
+                            }
+                        </select>
+                    }
                 </td>
 
+
                 <td>
-                    <button class="btn btn-sm btn-primary send-delivery"
-                            data-id="@order.Id"
-                            title="Send for Delivery"
-                    @(order.Status == OrderStatus.InDelivery ? "disabled" : "")>
-                        <i class="bi bi-truck"></i> Send for Delivery
-                    </button>
-
-                    <button class="btn btn-sm btn-info"
-                    @(order.Status == OrderStatus.InDelivery ? "disabled" : "")>
-                        Details
-                    </button>
-
-                    <button class="btn btn-sm btn-warning edit-order"
-                            id="btnEditOrder"
-                            data-id="@order.Id"
-                    @(order.Status == OrderStatus.InDelivery ? "disabled" : "")>
-                        Edit
-                    </button>
-
-                    <button class="btn btn-sm btn-danger delete-order"
-                            data-id="@order.Id"
-                    @(order.Status == OrderStatus.InDelivery ? "disabled" : "")>
-                        Delete
-                    </button>
+                    @if (allInDelivery)
+                    {
+                        <span class="badge bg-warning text-dark">In Delivery Now</span>
+                    }
+                    else if(allIsDelivered)
+                    {
+                        <span class="badge bg-success">Already Delivered</span>
+                    }
+                    else if (allReturned || order.Status == OrderStatus.Returned)
+                    {
+                        <span class="badge bg-danger">Returned</span>
+                    }
+                    else
+                    {
+                        <button class="btn btn-sm btn-primary send-delivery" data-id="@order.Id" title="Send for Delivery">
+                            <i class="bi bi-truck"></i> Send for Delivery
+                        </button>
+                        <button class="btn btn-sm btn-info">Details</button>
+                        <button class="btn btn-sm btn-warning edit-order" data-id="@order.Id">Edit</button>
+                        <button class="btn btn-sm btn-danger delete-order" data-id="@order.Id">Delete</button>
+                    }
                 </td>
             </tr>
 
+
+
             @foreach (var detail in order.OrderDetails)
             {
-                <tr class="table-light detail-row" data-id="@detail.Id" data-order-id="@order.Id">
+                <tr class="table-light detail-row d-none" data-id="@detail.Id" data-order-id="@order.Id" ...>
                     <td></td>
                     <td colspan="2">@detail.Product?.Name</td>
                     <td>@detail.Quantity × @detail.UnitPrice</td>
                     <td>@detail.TotalPrice</td>
-                    <td>
+                    @if (order.Deliveries.Any(d => d.OrderDetailId == detail.Id))
+                    {
+                        var delivery = order.Deliveries.First(d => d.OrderDetailId == detail.Id);
+
+                        if (!string.IsNullOrEmpty(delivery.ReturnReason))
+                        {
+                            <td><span class="badge bg-danger"><i class="bi bi-x-circle-fill"></i></span></td>
+                        }
+                        else if (delivery.IsDelivered)
+                        {
+                            <td><span class="badge bg-success"><i class="bi bi-check-circle-fill"></i></span></td>
+                        }
+                        else
+                        {
+                            <td><span class="badge bg-warning text-dark"><i class="bi bi-truck"></i></span></td>
+                        }
+
+                    }
+
+                    else
+                    {
+                        <td>
+
                         <button class="btn btn-sm btn-info" title="Details">
                             <i class="bi bi-eye"></i>
                         </button>
@@ -91,18 +146,15 @@
                         <button class="btn btn-sm btn-danger delete-detail" data-id="@detail.Id" title="Delete">
                             <i class="bi bi-trash"></i>
                         </button>
-                    </td>
+                    </td>}
                 </tr>
             }
-        }
-
-
-
             sl++;
         }
 
     </tbody>
 </table>
+
 <!-- Send for Delivery Modal -->
 <div class="modal fade" id="sendDeliveryModal" tabindex="-1" aria-labelledby="sendDeliveryModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -137,6 +189,10 @@
 
                 <!-- Product Selection Table -->
                 <div id="productSelectionContainer" class="mt-3" style="display:none;">
+                    <div class="mb-2">
+                        <input type="checkbox" id="selectAllProducts" class="form-check-input" checked>
+                        <label for="selectAllProducts" class="form-check-label fw-bold">Select All</label>
+                    </div>
                     <table class="table table-bordered table-hover align-middle">
                         <thead class="table-light">
                             <tr>
@@ -167,10 +223,6 @@
     </div>
 </div>
 
-
-
-
-
 @section Scripts {
     <script>
           $(document).ready(function() {
@@ -181,6 +233,22 @@
 
         let deliveryOrderId = null;
         let deliveryOrderDetails = [];
+                // When "Select All" checkbox is clicked
+        $(document).on("change", "#selectAllProducts", function() {
+            const checked = $(this).is(":checked");
+            $("#productSelectionBody input.delivery-product").each(function() {
+                if (!$(this).is("[readonly]")) {  // only toggle if not readonly/disabled
+                    $(this).prop("checked", checked);
+                }
+            });
+        });
+
+        // Optional: update "Select All" state if user manually checks/unchecks products
+        $(document).on("change", "#productSelectionBody input.delivery-product", function() {
+            const allEnabled = $("#productSelectionBody input.delivery-product:not([readonly])");
+            const allChecked = allEnabled.length && allEnabled.filter(":checked").length === allEnabled.length;
+            $("#selectAllProducts").prop("checked", allChecked);
+        });
 
         $(document).on("click", ".send-delivery", function() {
              deliveryOrderId = $(this).data("id");
@@ -195,18 +263,23 @@
                 // Multiple products - show modal
                 deliveryOrderDetails = [];
                 products.each(function() {
-                    const row = $(this);
-                    deliveryOrderDetails.push({
-                        detailId: row.data("id"),
-                        productName: row.find("td:nth-child(2)").text().trim(),
-                        quantity: parseInt(row.find("td:nth-child(3)").text().split("×")[0].trim())
-                    });
+                const row = $(this);
+                deliveryOrderDetails.push({
+                    detailId: row.data("id"),
+                    productName: row.find("td:nth-child(2)").text().trim(),
+                    quantity: parseInt(row.find("td:nth-child(3)").text().split("×")[0].trim()),
+                    sentForDelivery: row.data("sent") === true || row.data("sent") === "true"
+                });
+
+
+
                 });
                 populateDeliveryModal();
+                        $("#sendDeliveryModal").modal("show");
             }
         });
 
-                function sendForDelivery(productDetailIds, showToast = false) {
+        function sendForDelivery(productDetailIds, showToast = false) {
             $.ajax({
                 url: "/Orders/SendForDelivery",
                 type: "POST",
@@ -234,28 +307,45 @@
                 }
             });
         }
-
-        // Function to populate modal
+        
         function populateDeliveryModal() {
             const tbody = $("#productSelectionBody");
             tbody.empty();
-            deliveryOrderDetails.forEach(d => {
-                tbody.append(`
-                    <tr>
-                        <td><input type="checkbox" class="delivery-product" data-detail-id="${d.detailId}" checked></td>
-                        <td>${d.productName}</td>
-                        <td>${d.quantity}</td>
-                    </tr>
-                `);
-            });
-            $("#sendWholeOrder").prop("checked", true);
-            $("#productSelectionContainer").hide();
-            $("#sendDeliveryModal").modal("show");
+
+                    deliveryOrderDetails.forEach(d => {
+                        const alreadySent = d.sentForDelivery || false; // true if previously sent
+                        const disabled = d.sentForDelivery ? "readonly style='opacity:0.5;pointer-events:none;'" : "";
+                        const checked = d.sentForDelivery ? "" : "checked";
+                        const rowClass = alreadySent ? "table-secondary text-muted" : ""; // grey row
+
+                        tbody.append(`
+                            <tr class="${rowClass}">
+                                <td class="text-center">
+                                    <input class="form-check-input delivery-product" type="checkbox"
+                                           data-detail-id="${d.detailId}" ${disabled} ${checked}>
+                                </td>
+                                <td>${d.productName}</td>
+                                <td class="text-center">${d.quantity}</td>
+                            </tr>
+                        `);
+                    });
+
+                    // Reset Send All / Selected options
+                    $("#sendWholeOrder").prop("checked", true);
+                    $("#sendSelectedProducts").prop("checked", false);
+
+                    // Show product table only if "Send Selected Products" is checked
+                    if ($("#sendSelectedProducts").is(":checked") && deliveryOrderDetails.length > 1) {
+                        $("#productSelectionContainer").show();
+                    } else {
+                        $("#productSelectionContainer").hide();
+                    }
+                             $("#selectAllProducts").prop("checked", true);
         }
 
 
             // Toggle product selection table
-            $("input[name='deliveryOption']").change(function() {
+       $("input[name='deliveryOption']").change(function() {
                 if ($("#sendSelectedProducts").is(":checked")) {
                     $("#productSelectionContainer").show();
                 } else {
@@ -289,86 +379,66 @@
                     sendWholeOrder: sendAll,
                     productDetailIds: productsToSend
                 }),
-        success: function(res) {
-            if (!res.success) {
-                toastr.error(res.error || "Failed to send for delivery.");
-                return;
-            }
+                success: function(res) {
+                    if (!res.success) {
+                        toastr.error(res.error || "Failed to send for delivery.");
+                        return;
+                    }
 
-            $("#sendDeliveryModal").modal("hide");
-            toastr.success("Products sent for delivery!");
+                    $("#sendDeliveryModal").modal("hide");
+                    toastr.success("Products sent for delivery!");
 
-            const originalRow = $("tr.order-row[data-id='" + deliveryOrderId + "']");
+                    const originalRow = $("tr.order-row[data-id='" + deliveryOrderId + "']");
 
-                   // Remove selected products from original order
-        deliveryOrderDetails.forEach(d => {
-            if (productsToSend.includes(d.detailId)) {
-                $("tr.detail-row[data-id='" + d.detailId + "']").remove();
-            }
-        });
+                    // Mark selected product rows as "In Delivery Now"
+                    productsToSend.forEach(detailId => {
+                        const row = $("tr.detail-row[data-id='" + detailId + "']");
+                        row.find("td:last").html(`
+                            <span class="badge bg-warning text-dark">In Delivery Now</span>
+                            <button class="btn btn-sm btn-success mark-delivered" data-detail-id="${detailId}">Mark Delivered</button>
+                        `);
+                    });
 
-        // Update original order total
-        originalRow.find("td:nth-child(4)").text(res.remainingTotal);
+                    // Update order status if all products are now in delivery
+                    const allDetails = originalRow.nextUntil("tr.order-row").filter(".detail-row");
+                    let allInDelivery = true;
+                    allDetails.each(function() {
+                        if (!$(this).find(".mark-delivered").length) {
+                            allInDelivery = false;
+                            return false; // break
+                        }
+                    });
 
-        // If original order has no remaining products
-        if (res.remainingTotal === 0) {
-            originalRow.find(".send-delivery, .edit-order, .delete-order").prop("disabled", true);
-            originalRow.find("select.order-status").val(3).prop("disabled", true);
-            originalRow.addClass("table-secondary");
-        }
+                    if (allInDelivery) {
+                        originalRow.find(".order-status").val(3); // InDelivery
+                    }
 
-        // Add new order row for delivered products only
-        if (res.newOrderId && res.newOrder.length > 0) {
-            let newOrderTotal = res.newOrder.reduce((sum, d) => sum + d.totalPrice, 0);
-
-            let newOrderRow = `<tr class="table-primary fw-bold order-row" data-id="${res.newOrderId}">
-                <td></td>
-                <td>${new Date().toLocaleDateString()}</td>
-                <td>${originalRow.find("td:nth-child(3)").text()}</td>
-                <td>${newOrderTotal}</td>
-                <td>
-                    <select class="form-select form-select-sm order-status" data-id="${res.newOrderId}" disabled>
-                        <option value="3" selected>InDelivery</option>
-                    </select>
-                </td>
-                <td>
-                    <button class="btn btn-sm btn-primary send-delivery" disabled>Send for Delivery</button>
-                    <button class="btn btn-sm btn-info">Details</button>
-                    <button class="btn btn-sm btn-warning" disabled>Edit</button>
-                    <button class="btn btn-sm btn-danger" disabled>Delete</button>
-                </td>
-            </tr>`;
-
-            // Only add the **selected products** for the new order
-            res.newOrder.forEach(d => {
-                newOrderRow += `<tr class="table-light detail-row" data-id="${d.detailId}" data-order-id="${res.newOrderId}">
-                    <td></td>
-                    <td colspan="2">${d.productName}</td>
-                    <td>${d.quantity}</td>
-                    <td>${d.totalPrice}</td>
-                    <td>
-                        <button class="btn btn-sm btn-info">Details</button>
-                        <button class="btn btn-sm btn-warning" disabled>Edit</button>
-                        <button class="btn btn-sm btn-danger" disabled>Delete</button>
-                    </td>
-                </tr>`;
-            });
-
-            originalRow.after(newOrderRow);
-        }
-
-        recalcSerials();
-        updateActionButtons();
-}
-
-
-        ,
+                    recalcSerials();
+                    updateActionButtons();
+                },
                 error: function(xhr) {
                     toastr.error("Error: " + xhr.responseText);
                 }
             });
         });
 
+                $(document).on("click", ".toggle-details", function () {
+            const icon = $(this).find("i");
+            const orderRow = $(this).closest(".order-row");
+            const orderId = orderRow.data("id");
+
+            // Find all detail rows for this order
+            const detailRows = $(`.detail-row[data-order-id='${orderId}']`);
+
+            if (detailRows.hasClass("d-none")) {
+                // Show details
+                detailRows.removeClass("d-none");
+                icon.removeClass("bi-plus-square-fill").addClass("bi-dash-square-fill");
+            } else {
+                // Hide details
+                detailRows.addClass("d-none");
+                icon.removeClass("bi-dash-square-fill").addClass("bi-plus-square-fill");
+            }
         });
 
         function updateActionButtons() {
@@ -386,31 +456,39 @@
                 row.css("opacity", "1");
                 row.nextUntil("tr.order-row").css("opacity", "1");
 
-                const detailRows = row.nextUntil("tr.order-row");
+                const detailRows = row.nextUntil("tr.order-row").filter(".detail-row");
 
+                // Handle partial delivery
+                detailRows.each(function() {
+                    const dRow = $(this);
+                    const markDeliveredBtn = dRow.find(".mark-delivered");
+
+                    if (markDeliveredBtn.length) {
+                        // Currently in delivery
+                        dRow.addClass("table-secondary");
+                        markDeliveredBtn.prop("disabled", false);
+                        dRow.find("button").not(".mark-delivered").prop("disabled", true);
+                    } else if (dRow.find(".badge.bg-success").length) {
+                        // Already delivered
+                        dRow.addClass("table-secondary");
+                        dRow.find("button").prop("disabled", true);
+                    } else {
+                        // Normal rows
+                        dRow.removeClass("table-secondary");
+                        dRow.find("button").prop("disabled", false);
+                    }
+                });
+
+                // Update order row based on overall status
                 if (status === 3) { // InDelivery
-                    // Disable all buttons except Details
                     row.find("button").not(".btn-info").prop("disabled", true);
-                    detailRows.find("button").not(".btn-info").prop("disabled", true);
-
-                    // Keep dropdown enabled
                     row.find(".order-status").prop("disabled", false);
-
-                    // Grey out rows
                     row.addClass("table-secondary");
-                    detailRows.addClass("table-secondary");
-                }
-                else if (status === 4 || status === 5) { // Delivered or Cancelled
-                    // Disable all buttons including Details
+                } else if (status === 4 || status === 5) { // Delivered or Cancelled
                     row.find("button").prop("disabled", true);
                     row.find(".order-status").prop("disabled", true);
-                    detailRows.find("button").prop("disabled", true);
-
-                    // Grey out rows
                     row.addClass("table-secondary");
-                    detailRows.addClass("table-secondary");
                     row.css("opacity", "0.5");
-                    detailRows.css("opacity", "0.5");
                 }
             });
         }
@@ -522,11 +600,12 @@
         $("#btnAddOrder").click(function () {
             window.location.href = '/Orders/Create';
         });
-                $(document).on("click", ".edit-order", function () {
+         
+        $(document).on("click", ".edit-order", function () {
             var id = $(this).data("id");
             window.location.href = '/Orders/Edit/' + id;
         });
-
+});
 
     </script>
 }

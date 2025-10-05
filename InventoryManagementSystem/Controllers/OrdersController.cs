@@ -21,6 +21,7 @@ namespace InventoryManagementSystem.Controllers
                 .Include(o => o.Customer)
                 .Include(o => o.OrderDetails)
                     .ThenInclude(d => d.Product)
+                    .Include(o => o.Deliveries)
                 .ToListAsync();
 
             return View(orders);
@@ -344,81 +345,63 @@ namespace InventoryManagementSystem.Controllers
 
             return Json(order);
         }
+
         [HttpPost]
         public async Task<IActionResult> SendForDelivery([FromBody] SendDeliveryDto data)
         {
-            int orderId = data.OrderId;
-            List<int> selectedDetailIds = data.ProductDetailIds;
-
             var order = await _context.Orders
                 .Include(o => o.OrderDetails)
-                .ThenInclude(od => od.Product)
-                .FirstOrDefaultAsync(o => o.Id == orderId);
+                .ThenInclude(d => d.Product)
+                .FirstOrDefaultAsync(o => o.Id == data.OrderId);
 
             if (order == null)
                 return Json(new { success = false, error = "Order not found" });
 
-            var selectedDetails = order.OrderDetails.Where(od => selectedDetailIds.Contains(od.Id)).ToList();
-            if (!selectedDetails.Any())
-                return Json(new { success = false, error = "Select at least one product" });
+            var selectedDetails = order.OrderDetails
+                .Where(d => data.ProductDetailIds.Contains(d.Id))
+                .ToList();
 
-            int? newOrderId = null;
-            decimal remainingTotal = 0;
+            if (!selectedDetails.Any())
+                return Json(new { success = false, error = "No products selected" });
 
             using var transaction = await _context.Database.BeginTransactionAsync();
+
             try
             {
-                if (selectedDetails.Count == order.OrderDetails.Count)
+                // Insert new delivery records
+                foreach (var detail in selectedDetails)
                 {
-                    // Whole order  just set InDelivery
-                    order.Status = OrderStatus.InDelivery;
-                    remainingTotal = order.TotalAmount;
-                }
-                else
-                {
-                    // Partial  create new order
-                    var newOrder = new Order
+                    var existing = await _context.Deliveries
+                        .FirstOrDefaultAsync(d => d.OrderDetailId == detail.Id);
+
+                    if (existing == null)
                     {
-                        CustomerId = order.CustomerId,
-                        OrderDate = DateTime.UtcNow,
-                        Status = OrderStatus.InDelivery,
-                        TotalAmount = selectedDetails.Sum(d => d.TotalPrice),
-                        OrderDetails = selectedDetails.Select(d => new OrderDetails
+                        _context.Deliveries.Add(new Delivery
                         {
-                            ProductId = d.ProductId,
-                            Quantity = d.Quantity,
-                            UnitPrice = d.UnitPrice,
-                            TotalPrice = d.TotalPrice
-                        }).ToList()
-                    };
-                    _context.Orders.Add(newOrder);
-                    await _context.SaveChangesAsync();
-                    newOrderId = newOrder.Id;
-
-                    // Remove selected products from original order
-                    foreach (var d in selectedDetails)
-                    {
-                        order.OrderDetails.Remove(d);
+                            OrderId = order.Id,
+                            OrderDetailId = detail.Id,
+                            IsDelivered = false
+                        });
                     }
-                    remainingTotal = order.OrderDetails.Sum(d => d.TotalPrice);
                 }
 
-                order.TotalAmount = remainingTotal;
+                await _context.SaveChangesAsync();
+
+                // Update order status if all details are now in delivery
+                var allDetailIds = order.OrderDetails.Select(d => d.Id).ToList();
+                var deliveryCount = await _context.Deliveries.CountAsync(d => d.OrderId == order.Id);
+                if (deliveryCount == allDetailIds.Count)
+                {
+                    order.Status = OrderStatus.InDelivery;
+                }
+
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
                 return Json(new
                 {
                     success = true,
-                    newOrderId,
-                    newOrder = selectedDetails.Select(d => new
-                    {
-                        detailId = d.Id,
-                        productName = d.Product.Name,
-                        quantity = d.Quantity,
-                        totalPrice = d.TotalPrice
-                    }).ToList(),
-                    remainingTotal = order.OrderDetails.Sum(d => d.TotalPrice)
+                    message = "Delivery started successfully!"
                 });
             }
             catch (Exception ex)
@@ -427,8 +410,6 @@ namespace InventoryManagementSystem.Controllers
                 return Json(new { success = false, error = ex.Message });
             }
         }
-
-
 
     }
     // DTOs
@@ -451,12 +432,10 @@ namespace InventoryManagementSystem.Controllers
     }
 
 
-
-
     public class OrderDetailDto
     {
         public int Id { get; set; }
-        public int ProductId { get; set; }     // needed for saving
+        public int ProductId { get; set; }     
         public string ProductName { get; set; }
         public int Quantity { get; set; }
         public decimal UnitPrice { get; set; }
